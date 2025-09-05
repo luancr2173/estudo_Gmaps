@@ -126,6 +126,10 @@ const Map = () => {
     });
     drawingManager.searchMarker = marker;
 
+    // Centraliza o mapa no marcador
+    map.panTo({ lat, lng }); // 🔥 aqui
+    map.setZoom(16); // opcional: dá um zoom mais próximo
+
     // Envelope de 100m
     const delta = 0.0009; // ~100m
     const envelopeCoords = [
