@@ -110,36 +110,25 @@ const Map = () => {
   };
 
   const handlePointSearch = () => {
-    if (!latInput || !lngInput || !map) return;
+    if (!latInput || !lngInput || !map || !drawingManager) return;
 
-    const lat = parseFloat(latInput);
-    const lng = parseFloat(lngInput);
-
-    if (isNaN(lat) || isNaN(lng)) {
-      alert("Informe valores válidos para Latitude e Longitude!");
-      return;
+    // Remove marcador antigo
+    if (drawingManager.searchMarker) {
+      drawingManager.searchMarker.setMap(null);
     }
 
-    // Remove marcador anterior do ponto buscado, se existir
-    if (window.searchMarker) {
-      window.searchMarker.setMap(null);
-    }
-
-    // Adiciona marcador no ponto buscado
-    window.searchMarker = new google.maps.Marker({
-      position: { lat, lng },
+    // Cria marcador usando o drawingManager
+    const marker = new google.maps.Marker({
+      position: { lat: parseFloat(latInput), lng: parseFloat(lngInput) },
       map: map,
-      title: "Ponto buscado",
-      icon: {
-        url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png", // marcador azul
-      },
     });
 
-    // Transformar ponto diretamente para ArcGIS como "point"
-    const point = convertTo31983([lng, lat], "point");
-
+    // dispara a mesma lógica do overlaycomplete
+    drawingManager.searchMarker = marker;
+    const point = convertTo31983([parseFloat(lngInput), parseFloat(latInput)], "point");
     fetchData(point, "esriGeometryPoint", map);
   };
+
 
 
   useEffect(() => {
@@ -152,6 +141,33 @@ const Map = () => {
 
       const dm = createDrawingManager(mapInstance, convertTo31983, fetchData);
       setDrawingManager(dm);
+
+      // clique no mapa para mover o marcador de busca
+      mapInstance.addListener("click", (e) => {
+        const lat = e.latLng.lat();
+        const lng = e.latLng.lng();
+
+        // Remove marcador anterior
+        if (window.searchMarker) window.searchMarker.setMap(null);
+
+        // Adiciona marcador azul no ponto clicado
+        window.searchMarker = new google.maps.Marker({
+          position: { lat, lng },
+          map: mapInstance,
+          title: "Ponto buscado",
+          icon: {
+            url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+          },
+        });
+
+        // Atualiza inputs da interface
+        setLatInput(lat.toFixed(6));
+        setLngInput(lng.toFixed(6));
+
+        // Converte ponto para ArcGIS e busca
+        const point = convertTo31983([lng, lat], "point");
+        fetchData(point, "esriGeometryPoint", mapInstance);
+      });
     };
 
     if (!document.getElementById("google-maps-script")) {
