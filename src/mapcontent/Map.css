@@ -1,0 +1,120 @@
+/* ====== BASE RESET ====== */
+.map-container-wrapper {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* ====== LIGHT THEME ====== */
+.light {
+  --bg: #fafafa;
+  --bg-panel: #ffffff;
+  --text: #111827;
+  --text-muted: #666;
+  --border: #ddd;
+  --btn-bg: #111827;
+  --btn-text: #ffffff;
+}
+
+/* ====== DARK THEME ====== */
+.dark {
+  --bg: #1a1a1a;
+  --bg-panel: #2a2a2a;
+  --text: #f5f5f5;
+  --text-muted: #bbb;
+  --border: #444;
+  --btn-bg: #f5f5f5;
+  --btn-text: #111827;
+}
+
+/* ====== LAYOUT ====== */
+.map-container-wrapper {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Painel lateral */
+.map-aside {
+  width: 360px;
+  padding: 16px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow-y: auto;
+}
+
+.map-aside h4 {
+  font-weight: 600;
+  margin: 12px 0 6px 0;
+}
+
+.map-aside .title {
+  font-weight: 700;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.map-aside .hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.map-aside hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+}
+
+/* Inputs e labels */
+.map-aside label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.map-aside input,
+.map-aside textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.map-aside textarea {
+  resize: vertical;
+}
+
+/* Botões */
+.map-aside button {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 4px;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.map-aside button.primary {
+  background: var(--btn-bg);
+  color: var(--btn-text);
+}
+
+.map-aside button.toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  margin-top: 12px;
+}
+
+/* Mapa ocupa o resto */
+.map-area {
+  flex: 1;
+}

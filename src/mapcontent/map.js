@@ -1,25 +1,25 @@
+/* global google */
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import proj4 from "proj4";
+import { createDrawingManager } from "./drawingManager";
+import "./Map.css";
 
 const Map = () => {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
   const [overlays, setOverlays] = useState([]);
+  const [theme, setTheme] = useState("light"); // controla tema
 
   // Projeções
   const sirgas = "+proj=utm +zone=23 +south +datum=SIRGAS2000 +units=m +no_defs";
-  const wgs84 = "EPSG:4326"; // lat/lng
+  const wgs84 = "EPSG:4326";
 
-  // converte resultados ArcGIS de volta pra Lat/Lng 
+  // Converte resultados do ArcGIS → Lat/Lng
   const plotFeatures = useCallback((data, mapInstance) => {
-    setOverlays(prevOverlays => {
-      // Limpa overlays antigos do mapa
+    setOverlays((prevOverlays) => {
       prevOverlays.forEach((o) => o.setMap(null));
-
       const newOverlays = [];
-      if (!data.features) {
-        return newOverlays; // Retorna o novo estado (array vazio)
-      }
+      if (!data.features) return newOverlays;
 
       data.features.forEach((feature) => {
         // polígono
@@ -31,7 +31,7 @@ const Map = () => {
             })
           );
 
-          const polygon = new window.google.maps.Polygon({
+          const polygon = new google.maps.Polygon({
             paths,
             strokeColor: "#FF0000",
             strokeOpacity: 0.8,
@@ -51,7 +51,7 @@ const Map = () => {
             feature.geometry.y,
           ]);
 
-          const marker = new window.google.maps.Marker({
+          const marker = new google.maps.Marker({
             position: { lat, lng },
             map: mapInstance,
           });
@@ -60,41 +60,42 @@ const Map = () => {
         }
       });
 
-      return newOverlays; // Retorna o novo estado
+      return newOverlays;
     });
   }, []);
 
-  // faz a query ArcGIS
-  const fetchData = useCallback(async (geometry, geometryType, mapInstance) => {
-    const BASE_URL =
-      "https://www.geoservicos.ide.df.gov.br/arcgis/rest/services/Aplicacoes/ENDERECAMENTO_ATIVIDADES_LUOS_PPCUB/FeatureServer/0/query";
+  // Busca dados no ArcGIS
+  const fetchData = useCallback(
+    async (geometry, geometryType, mapInstance) => {
+      const BASE_URL =
+        "https://www.geoservicos.ide.df.gov.br/arcgis/rest/services/Aplicacoes/ENDERECAMENTO_ATIVIDADES_LUOS_PPCUB/FeatureServer/0/query";
 
-    const params = new URLSearchParams({
-      where: "1=1",
-      geometry: JSON.stringify(geometry),
-      geometryType,
-      spatialRel: "esriSpatialRelIntersects",
-      returnGeometry: "true",
-      outFields: "*",
-      f: "json",
-    });
+      const params = new URLSearchParams({
+        where: "1=1",
+        geometry: JSON.stringify(geometry),
+        geometryType,
+        spatialRel: "esriSpatialRelIntersects",
+        returnGeometry: "true",
+        outFields: "*",
+        f: "json",
+      });
 
-    const url = `${BASE_URL}?${params.toString()}`;
-    console.log("Consulta:", url);
+      const url = `${BASE_URL}?${params.toString()}`;
+      console.log("Consulta:", url);
 
-    try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        plotFeatures(data, mapInstance);
+      } catch (error) {
+        console.error("Falha ao buscar dados do ArcGIS:", error);
       }
-      const data = await res.json();
-      plotFeatures(data, mapInstance);
-    } catch (error) {
-      console.error("Falha ao buscar dados do ArcGIS:", error);
-    }
-  }, [plotFeatures]);
+    },
+    [plotFeatures]
+  );
 
-  // converte Lat/Lng → EPSG:31983 para enviar ao ArcGIS
+  // Converte Lat/Lng → EPSG:31983
   const convertTo31983 = (coords, type) => {
     if (type === "polygon") {
       return {
@@ -102,6 +103,7 @@ const Map = () => {
         spatialReference: { wkid: 31983 },
       };
     }
+
     if (type === "envelope") {
       const [sw, ne] = coords;
       const [xmin, ymin] = proj4(wgs84, sirgas, sw);
@@ -110,54 +112,17 @@ const Map = () => {
     }
   };
 
+  // Inicializa o mapa
   useEffect(() => {
     const initMap = () => {
-      const mapInstance = new window.google.maps.Map(mapRef.current, {
+      const mapInstance = new google.maps.Map(mapRef.current, {
         center: { lat: -15.793889, lng: -47.882778 },
         zoom: 12,
       });
       setMap(mapInstance);
 
-      const drawingManager = new window.google.maps.drawing.DrawingManager({
-        drawingMode: null,
-        drawingControl: true,
-        drawingControlOptions: {
-          position: window.google.maps.ControlPosition.TOP_CENTER,
-          drawingModes: [
-            window.google.maps.drawing.OverlayType.POLYGON,
-            window.google.maps.drawing.OverlayType.RECTANGLE,
-            window.google.maps.drawing.OverlayType.MARKER,
-            window.google.maps.drawing.OverlayType.POLYLINE,
-          ],
-        },
-        map: mapInstance,
-      });
-
-      window.google.maps.event.addListener(
-        drawingManager,
-        "overlaycomplete",
-        (event) => {
-          if (event.type === "polygon") {
-            const path = event.overlay.getPath().getArray();
-            const coords = path.map((latlng) => [latlng.lng(), latlng.lat()]);
-            coords.push(coords[0]); // fecha polígono
-            const geojson = convertTo31983(coords, "polygon");
-            fetchData(geojson, "esriGeometryPolygon", mapInstance);
-          }
-
-          if (event.type === "rectangle") {
-            const bounds = event.overlay.getBounds();
-            const ne = bounds.getNorthEast();
-            const sw = bounds.getSouthWest();
-            const envelopeCoords = [
-              [sw.lng(), sw.lat()],
-              [ne.lng(), ne.lat()],
-            ];
-            const envelope = convertTo31983(envelopeCoords, "envelope");
-            fetchData(envelope, "esriGeometryEnvelope", mapInstance);
-          }
-        }
-      );
+      // usa o módulo já criado 🐙
+      createDrawingManager(mapInstance, convertTo31983, fetchData);
     };
 
     if (!document.getElementById("google-maps-script")) {
@@ -174,11 +139,38 @@ const Map = () => {
   }, [fetchData]);
 
   return (
-    <div
-      ref={mapRef}
-      style={{ height: "100vh", width: "100%" }}
-      className="map-container"
-    />
+    <div className={`map-container-wrapper ${theme}`}>
+      {/* Painel lateral */}
+      <aside className="map-aside">
+        <div className="title">🎯 Buscas por Coordenadas</div>
+        <div className="hint">ArcGIS + Google Maps, modo sniper.</div>
+
+        <hr />
+
+        <h4>Buscar por ponto</h4>
+        <label>Latitude</label>
+        <input type="number" placeholder="-15.793889" />
+        <label>Longitude</label>
+        <input type="number" placeholder="-47.882778" />
+        <button className="primary">Buscar</button>
+
+        <hr />
+
+        <h4>Buscar por polígono</h4>
+        <textarea rows="3" placeholder="[[lng,lat], [lng,lat], ...]" />
+        <button className="primary">Buscar</button>
+
+        <button
+          className="toggle"
+          onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+        >
+          Alternar para {theme === "light" ? "🌙 Dark" : "☀️ Light"} Mode
+        </button>
+      </aside>
+
+      {/* Área do mapa */}
+      <div ref={mapRef} className="map-area" />
+    </div>
   );
 };
 
