@@ -119,18 +119,15 @@ const Map = () => {
       drawingManager.searchMarker.setMap(null);
     }
 
-    // Cria marcador de busca (mesmo que o drawingManager usa)
+    // Cria marcador de busca
     const marker = new google.maps.Marker({
       position: { lat, lng },
       map,
+      animation: google.maps.Animation.DROP, // animação do marcador
     });
     drawingManager.searchMarker = marker;
 
-    // Centraliza o mapa no marcador
-    map.panTo({ lat, lng }); // 🔥 aqui
-    map.setZoom(16); // opcional: dá um zoom mais próximo
-
-    // Envelope de 100m
+    // Raio de 100m
     const delta = 0.0009; // ~100m
     const envelopeCoords = [
       [lng - delta, lat - delta],
@@ -139,7 +136,13 @@ const Map = () => {
     const envelope = convertTo31983(envelopeCoords, "envelope");
 
     fetchData(envelope, "esriGeometryEnvelope", map);
+
+    // Faz o "fly to target"
+    const target = new google.maps.LatLng(lat, lng);
+    map.panTo(target); // centraliza
+    map.setZoom(16);   // ajusta zoom próximo
   };
+
 
   useEffect(() => {
     const initMap = () => {
