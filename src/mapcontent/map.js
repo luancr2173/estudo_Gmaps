@@ -10,6 +10,8 @@ const Map = () => {
   const [overlays, setOverlays] = useState([]); // resultados do ArcGIS
   const [theme, setTheme] = useState("light");
   const [drawingManager, setDrawingManager] = useState(null);
+  const [latInput, setLatInput] = useState("");
+  const [lngInput, setLngInput] = useState("");
 
   const sirgas = "+proj=utm +zone=23 +south +datum=SIRGAS2000 +units=m +no_defs";
   const wgs84 = "EPSG:4326";
@@ -107,6 +109,39 @@ const Map = () => {
     }
   };
 
+  const handlePointSearch = () => {
+    if (!latInput || !lngInput || !map) return;
+
+    const lat = parseFloat(latInput);
+    const lng = parseFloat(lngInput);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      alert("Informe valores válidos para Latitude e Longitude!");
+      return;
+    }
+
+    // Remove marcador anterior do ponto buscado, se existir
+    if (window.searchMarker) {
+      window.searchMarker.setMap(null);
+    }
+
+    // Adiciona marcador no ponto buscado
+    window.searchMarker = new google.maps.Marker({
+      position: { lat, lng },
+      map: map,
+      title: "Ponto buscado",
+      icon: {
+        url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png", // marcador azul
+      },
+    });
+
+    // Transformar ponto diretamente para ArcGIS como "point"
+    const point = convertTo31983([lng, lat], "point");
+
+    fetchData(point, "esriGeometryPoint", map);
+  };
+
+
   useEffect(() => {
     const initMap = () => {
       const mapInstance = new google.maps.Map(mapRef.current, {
@@ -142,10 +177,22 @@ const Map = () => {
 
         <h4>Buscar por ponto</h4>
         <label>Latitude</label>
-        <input type="number" placeholder="-15.793889" />
+        <input
+          type="number"
+          value={latInput}
+          onChange={(e) => setLatInput(e.target.value)}
+          placeholder="-15.793889"
+        />
         <label>Longitude</label>
-        <input type="number" placeholder="-47.882778" />
-        <button className="primary">Buscar</button>
+        <input
+          type="number"
+          value={lngInput}
+          onChange={(e) => setLngInput(e.target.value)}
+          placeholder="-47.882778"
+        />
+        <button className="primary" onClick={handlePointSearch}>
+          Buscar
+        </button>
 
         <hr />
 
@@ -153,7 +200,10 @@ const Map = () => {
         <textarea rows="3" placeholder="[[lng,lat], [lng,lat], ...]" />
         <button className="primary">Buscar</button>
 
-        <button className="toggle" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>
+        <button
+          className="toggle"
+          onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+        >
           Alternar para {theme === "light" ? "🌙 Dark" : "☀️ Light"} Mode
         </button>
 
