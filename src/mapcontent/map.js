@@ -7,7 +7,6 @@ import "./Map.css";
 const Map = () => {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
-  const [overlays, setOverlays] = useState([]);
   const [theme, setTheme] = useState("light");
   const [drawingManager, setDrawingManager] = useState(null);
   const [latInput, setLatInput] = useState("");
@@ -16,77 +15,81 @@ const Map = () => {
   const sirgas = "+proj=utm +zone=23 +south +datum=SIRGAS2000 +units=m +no_defs";
   const wgs84 = "EPSG:4326";
 
+  // referência para todos os overlays do ArcGIS
+  const arcgisOverlays = useRef([]);
+
   const plotFeatures = useCallback((data, mapInstance) => {
-    setOverlays(prev => {
-      prev.forEach(o => o.setMap(null));
-      const newOverlays = [];
-      if (!data.features) return newOverlays;
+    // limpa overlays antigos
+    arcgisOverlays.current.forEach((o) => o.setMap(null));
+    arcgisOverlays.current = [];
 
-      data.features.forEach(feature => {
-        // Polígono
-        if (feature.geometry?.rings) {
-          const paths = feature.geometry.rings.map(ring =>
-            ring.map(([x, y]) => {
-              const [lng, lat] = proj4(sirgas, wgs84, [x, y]);
-              return { lat, lng };
-            })
-          );
-          const polygon = new google.maps.Polygon({
-            paths,
-            strokeColor: "#FF0000",
-            strokeOpacity: 0.8,
-            strokeWeight: 2,
-            fillColor: "#FF0000",
-            fillOpacity: 0.35,
-            map: mapInstance,
-          });
-          newOverlays.push(polygon);
-        }
+    if (!data.features) return;
 
-        // Ponto
-        if (feature.geometry?.x && feature.geometry?.y) {
-          const [lng, lat] = proj4(sirgas, wgs84, [
-            feature.geometry.x,
-            feature.geometry.y,
-          ]);
-          const marker = new google.maps.Marker({
-            position: { lat, lng },
-            map: mapInstance,
-          });
-          newOverlays.push(marker);
-        }
-      });
+    data.features.forEach((feature) => {
+      // polígonos
+      if (feature.geometry?.rings) {
+        const paths = feature.geometry.rings.map((ring) =>
+          ring.map(([x, y]) => {
+            const [lng, lat] = proj4(sirgas, wgs84, [x, y]);
+            return { lat, lng };
+          })
+        );
+        const polygon = new google.maps.Polygon({
+          paths,
+          strokeColor: "#FF0000",
+          strokeOpacity: 0.8,
+          strokeWeight: 2,
+          fillColor: "#FF0000",
+          fillOpacity: 0.35,
+          map: mapInstance,
+        });
+        arcgisOverlays.current.push(polygon);
+      }
 
-      return newOverlays;
+      // pontos
+      if (feature.geometry?.x && feature.geometry?.y) {
+        const [lng, lat] = proj4(sirgas, wgs84, [
+          feature.geometry.x,
+          feature.geometry.y,
+        ]);
+        const marker = new google.maps.Marker({
+          position: { lat, lng },
+          map: mapInstance,
+        });
+        arcgisOverlays.current.push(marker);
+      }
     });
   }, []);
 
-  const fetchData = useCallback(async (geometry, geometryType, mapInstance) => {
-    const BASE_URL =
-      "https://www.geoservicos.ide.df.gov.br/arcgis/rest/services/Aplicacoes/ENDERECAMENTO_ATIVIDADES_LUOS_PPCUB/FeatureServer/0/query";
+  const fetchData = useCallback(
+    async (geometry, geometryType, mapInstance) => {
+      const BASE_URL =
+        "https://www.geoservicos.ide.df.gov.br/arcgis/rest/services/Aplicacoes/ENDERECAMENTO_ATIVIDADES_LUOS_PPCUB/FeatureServer/0/query";
 
-    const params = new URLSearchParams({
-      where: "1=1",
-      geometry: JSON.stringify(geometry),
-      geometryType,
-      spatialRel: "esriSpatialRelIntersects",
-      returnGeometry: "true",
-      outFields: "*",
-      f: "json",
-    });
+      const params = new URLSearchParams({
+        where: "1=1",
+        geometry: JSON.stringify(geometry),
+        geometryType,
+        spatialRel: "esriSpatialRelIntersects",
+        returnGeometry: "true",
+        outFields: "*",
+        f: "json",
+      });
 
-    const url = `${BASE_URL}?${params.toString()}`;
-    console.log("Consulta:", url);
+      const url = `${BASE_URL}?${params.toString()}`;
+      console.log("Consulta:", url);
 
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      plotFeatures(data, mapInstance);
-    } catch (error) {
-      console.error("Falha ao buscar dados do ArcGIS:", error);
-    }
-  }, [plotFeatures]);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        plotFeatures(data, mapInstance);
+      } catch (error) {
+        console.error("Falha ao buscar dados do ArcGIS:", error);
+      }
+    },
+    [plotFeatures]
+  );
 
   const convertTo31983 = (coords, type) => {
     if (type === "polygon") {
@@ -109,25 +112,27 @@ const Map = () => {
   };
 
   const handlePointSearch = () => {
-    if (!latInput || !lngInput || !map || !drawingManager) return;
+    if (!latInput || !lngInput || !map) return;
 
     const lat = parseFloat(latInput);
     const lng = parseFloat(lngInput);
 
-    // Remove marcador antigo de busca
-    if (drawingManager.searchMarker) {
+    // cria marcador de busca único (usando o do drawingManager)
+    if (drawingManager?.searchMarker) {
       drawingManager.searchMarker.setMap(null);
     }
 
-    // Cria marcador de busca
     const marker = new google.maps.Marker({
       position: { lat, lng },
       map,
-      animation: google.maps.Animation.DROP, // animação do marcador
+      title: "Ponto buscado",
     });
     drawingManager.searchMarker = marker;
 
-    // Raio de 100m
+    // centraliza o mapa no ponto
+    map.setCenter({ lat, lng });
+
+    // cria envelope de 100m (~0.001º) ao redor do ponto
     const delta = 0.0009; // ~100m
     const envelopeCoords = [
       [lng - delta, lat - delta],
@@ -136,13 +141,16 @@ const Map = () => {
     const envelope = convertTo31983(envelopeCoords, "envelope");
 
     fetchData(envelope, "esriGeometryEnvelope", map);
-
-    // Faz o "fly to target"
-    const target = new google.maps.LatLng(lat, lng);
-    map.panTo(target); // centraliza
-    map.setZoom(16);   // ajusta zoom próximo
   };
 
+  const clearAllOverlays = () => {
+    // limpa ArcGIS
+    arcgisOverlays.current.forEach((overlay) => overlay.setMap(null));
+    arcgisOverlays.current = [];
+
+    // limpa overlays do usuário
+    drawingManager?.clearUserOverlays();
+  };
 
   useEffect(() => {
     const initMap = () => {
@@ -198,23 +206,16 @@ const Map = () => {
 
         <hr />
 
-        <h4>Buscar por polígono</h4>
-        <textarea rows="3" placeholder="[[lng,lat], [lng,lat], ...]" />
-        <button className="primary">Buscar</button>
+        <button className="secondary" onClick={clearAllOverlays}>
+          🗑 Limpar Todo o Mapa
+        </button>
 
+        <hr />
         <button
           className="toggle"
           onClick={() => setTheme(theme === "light" ? "dark" : "light")}
         >
           Alternar para {theme === "light" ? "🌙 Dark" : "☀️ Light"} Mode
-        </button>
-
-        <hr />
-        <button
-          className="secondary"
-          onClick={() => drawingManager?.clearUserOverlays()}
-        >
-          🗑 Limpar desenhos do usuário
         </button>
       </aside>
 
