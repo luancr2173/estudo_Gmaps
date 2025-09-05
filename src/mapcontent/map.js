@@ -7,7 +7,7 @@ import "./Map.css";
 const Map = () => {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
-  const [overlays, setOverlays] = useState([]); // resultados do ArcGIS
+  const [overlays, setOverlays] = useState([]);
   const [theme, setTheme] = useState("light");
   const [drawingManager, setDrawingManager] = useState(null);
   const [latInput, setLatInput] = useState("");
@@ -17,14 +17,15 @@ const Map = () => {
   const wgs84 = "EPSG:4326";
 
   const plotFeatures = useCallback((data, mapInstance) => {
-    setOverlays((prev) => {
-      prev.forEach((o) => o.setMap(null));
+    setOverlays(prev => {
+      prev.forEach(o => o.setMap(null));
       const newOverlays = [];
       if (!data.features) return newOverlays;
 
-      data.features.forEach((feature) => {
+      data.features.forEach(feature => {
+        // Polígono
         if (feature.geometry?.rings) {
-          const paths = feature.geometry.rings.map((ring) =>
+          const paths = feature.geometry.rings.map(ring =>
             ring.map(([x, y]) => {
               const [lng, lat] = proj4(sirgas, wgs84, [x, y]);
               return { lat, lng };
@@ -42,6 +43,7 @@ const Map = () => {
           newOverlays.push(polygon);
         }
 
+        // Ponto
         if (feature.geometry?.x && feature.geometry?.y) {
           const [lng, lat] = proj4(sirgas, wgs84, [
             feature.geometry.x,
@@ -59,35 +61,32 @@ const Map = () => {
     });
   }, []);
 
-  const fetchData = useCallback(
-    async (geometry, geometryType, mapInstance) => {
-      const BASE_URL =
-        "https://www.geoservicos.ide.df.gov.br/arcgis/rest/services/Aplicacoes/ENDERECAMENTO_ATIVIDADES_LUOS_PPCUB/FeatureServer/0/query";
+  const fetchData = useCallback(async (geometry, geometryType, mapInstance) => {
+    const BASE_URL =
+      "https://www.geoservicos.ide.df.gov.br/arcgis/rest/services/Aplicacoes/ENDERECAMENTO_ATIVIDADES_LUOS_PPCUB/FeatureServer/0/query";
 
-      const params = new URLSearchParams({
-        where: "1=1",
-        geometry: JSON.stringify(geometry),
-        geometryType,
-        spatialRel: "esriSpatialRelIntersects",
-        returnGeometry: "true",
-        outFields: "*",
-        f: "json",
-      });
+    const params = new URLSearchParams({
+      where: "1=1",
+      geometry: JSON.stringify(geometry),
+      geometryType,
+      spatialRel: "esriSpatialRelIntersects",
+      returnGeometry: "true",
+      outFields: "*",
+      f: "json",
+    });
 
-      const url = `${BASE_URL}?${params.toString()}`;
-      console.log("Consulta:", url);
+    const url = `${BASE_URL}?${params.toString()}`;
+    console.log("Consulta:", url);
 
-      try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        plotFeatures(data, mapInstance);
-      } catch (error) {
-        console.error("Falha ao buscar dados do ArcGIS:", error);
-      }
-    },
-    [plotFeatures]
-  );
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      plotFeatures(data, mapInstance);
+    } catch (error) {
+      console.error("Falha ao buscar dados do ArcGIS:", error);
+    }
+  }, [plotFeatures]);
 
   const convertTo31983 = (coords, type) => {
     if (type === "polygon") {
@@ -112,24 +111,31 @@ const Map = () => {
   const handlePointSearch = () => {
     if (!latInput || !lngInput || !map || !drawingManager) return;
 
-    // Remove marcador antigo
+    const lat = parseFloat(latInput);
+    const lng = parseFloat(lngInput);
+
+    // Remove marcador antigo de busca
     if (drawingManager.searchMarker) {
       drawingManager.searchMarker.setMap(null);
     }
 
-    // Cria marcador usando o drawingManager
+    // Cria marcador de busca (mesmo que o drawingManager usa)
     const marker = new google.maps.Marker({
-      position: { lat: parseFloat(latInput), lng: parseFloat(lngInput) },
-      map: map,
+      position: { lat, lng },
+      map,
     });
-
-    // dispara a mesma lógica do overlaycomplete
     drawingManager.searchMarker = marker;
-    const point = convertTo31983([parseFloat(lngInput), parseFloat(latInput)], "point");
-    fetchData(point, "esriGeometryPoint", map);
+
+    // Envelope de 100m
+    const delta = 0.0009; // ~100m
+    const envelopeCoords = [
+      [lng - delta, lat - delta],
+      [lng + delta, lat + delta],
+    ];
+    const envelope = convertTo31983(envelopeCoords, "envelope");
+
+    fetchData(envelope, "esriGeometryEnvelope", map);
   };
-
-
 
   useEffect(() => {
     const initMap = () => {
@@ -141,33 +147,6 @@ const Map = () => {
 
       const dm = createDrawingManager(mapInstance, convertTo31983, fetchData);
       setDrawingManager(dm);
-
-      // clique no mapa para mover o marcador de busca
-      mapInstance.addListener("click", (e) => {
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
-
-        // Remove marcador anterior
-        if (window.searchMarker) window.searchMarker.setMap(null);
-
-        // Adiciona marcador azul no ponto clicado
-        window.searchMarker = new google.maps.Marker({
-          position: { lat, lng },
-          map: mapInstance,
-          title: "Ponto buscado",
-          icon: {
-            url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-          },
-        });
-
-        // Atualiza inputs da interface
-        setLatInput(lat.toFixed(6));
-        setLngInput(lng.toFixed(6));
-
-        // Converte ponto para ArcGIS e busca
-        const point = convertTo31983([lng, lat], "point");
-        fetchData(point, "esriGeometryPoint", mapInstance);
-      });
     };
 
     if (!document.getElementById("google-maps-script")) {

@@ -1,5 +1,5 @@
 export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => {
-  const userOverlays = []; 
+  const userOverlays = [];
 
   const drawingManager = new window.google.maps.drawing.DrawingManager({
     drawingMode: null,
@@ -10,14 +10,14 @@ export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => 
         window.google.maps.drawing.OverlayType.POLYGON,
         window.google.maps.drawing.OverlayType.RECTANGLE,
         window.google.maps.drawing.OverlayType.CIRCLE,
-        window.google.maps.drawing.OverlayType.MARKER, // marcador
+        window.google.maps.drawing.OverlayType.MARKER,
         window.google.maps.drawing.OverlayType.POLYLINE,
       ],
     },
     map: mapInstance,
   });
 
-  drawingManager.searchMarker = null; // 👈 marcador de busca único
+  drawingManager.searchMarker = null;
 
   const handleOverlay = (event) => {
     userOverlays.push(event.overlay);
@@ -29,10 +29,19 @@ export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => 
         userOverlays.splice(userOverlays.indexOf(drawingManager.searchMarker), 1);
       }
 
-      drawingManager.searchMarker = event.overlay; // define como marcador de busca
+      drawingManager.searchMarker = event.overlay;
+
       const position = event.overlay.getPosition();
-      const point = convertTo31983([position.lng(), position.lat()], "point");
-      fetchData(point, "esriGeometryPoint", mapInstance);
+
+      // criar envelope de 100m ao redor do marcador
+      const delta = 0.0009; // ~100m em lat/lng (aprox)
+      const envelopeCoords = [
+        [position.lng() - delta, position.lat() - delta],
+        [position.lng() + delta, position.lat() + delta],
+      ];
+      const envelope = convertTo31983(envelopeCoords, "envelope");
+
+      fetchData(envelope, "esriGeometryEnvelope", mapInstance);
     }
 
     if (event.type === "polygon") {
@@ -61,7 +70,7 @@ export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => 
   drawingManager.clearUserOverlays = () => {
     userOverlays.forEach((overlay) => overlay.setMap(null));
     userOverlays.length = 0;
-    drawingManager.searchMarker = null; // reset marcador de busca
+    drawingManager.searchMarker = null;
   };
 
   return drawingManager;
