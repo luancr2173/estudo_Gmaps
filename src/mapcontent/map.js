@@ -7,22 +7,20 @@ import "./Map.css";
 const Map = () => {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
-  const [overlays, setOverlays] = useState([]);
-  const [theme, setTheme] = useState("light"); // controla tema
+  const [overlays, setOverlays] = useState([]); // resultados do ArcGIS
+  const [theme, setTheme] = useState("light");
+  const [drawingManager, setDrawingManager] = useState(null);
 
-  // Projeções
   const sirgas = "+proj=utm +zone=23 +south +datum=SIRGAS2000 +units=m +no_defs";
   const wgs84 = "EPSG:4326";
 
-  // Converte resultados do ArcGIS → Lat/Lng
   const plotFeatures = useCallback((data, mapInstance) => {
-    setOverlays((prevOverlays) => {
-      prevOverlays.forEach((o) => o.setMap(null));
+    setOverlays((prev) => {
+      prev.forEach((o) => o.setMap(null));
       const newOverlays = [];
       if (!data.features) return newOverlays;
 
       data.features.forEach((feature) => {
-        // polígono
         if (feature.geometry?.rings) {
           const paths = feature.geometry.rings.map((ring) =>
             ring.map(([x, y]) => {
@@ -30,7 +28,6 @@ const Map = () => {
               return { lat, lng };
             })
           );
-
           const polygon = new google.maps.Polygon({
             paths,
             strokeColor: "#FF0000",
@@ -40,22 +37,18 @@ const Map = () => {
             fillOpacity: 0.35,
             map: mapInstance,
           });
-
           newOverlays.push(polygon);
         }
 
-        // ponto
         if (feature.geometry?.x && feature.geometry?.y) {
           const [lng, lat] = proj4(sirgas, wgs84, [
             feature.geometry.x,
             feature.geometry.y,
           ]);
-
           const marker = new google.maps.Marker({
             position: { lat, lng },
             map: mapInstance,
           });
-
           newOverlays.push(marker);
         }
       });
@@ -64,7 +57,6 @@ const Map = () => {
     });
   }, []);
 
-  // Busca dados no ArcGIS
   const fetchData = useCallback(
     async (geometry, geometryType, mapInstance) => {
       const BASE_URL =
@@ -95,7 +87,6 @@ const Map = () => {
     [plotFeatures]
   );
 
-  // Converte Lat/Lng → EPSG:31983
   const convertTo31983 = (coords, type) => {
     if (type === "polygon") {
       return {
@@ -103,16 +94,19 @@ const Map = () => {
         spatialReference: { wkid: 31983 },
       };
     }
-
     if (type === "envelope") {
       const [sw, ne] = coords;
       const [xmin, ymin] = proj4(wgs84, sirgas, sw);
       const [xmax, ymax] = proj4(wgs84, sirgas, ne);
       return { xmin, ymin, xmax, ymax, spatialReference: { wkid: 31983 } };
     }
+    if (type === "point") {
+      const [lng, lat] = coords;
+      const [x, y] = proj4(wgs84, sirgas, [lng, lat]);
+      return { x, y, spatialReference: { wkid: 31983 } };
+    }
   };
 
-  // Inicializa o mapa
   useEffect(() => {
     const initMap = () => {
       const mapInstance = new google.maps.Map(mapRef.current, {
@@ -121,8 +115,8 @@ const Map = () => {
       });
       setMap(mapInstance);
 
-      // usa o módulo já criado 🐙
-      createDrawingManager(mapInstance, convertTo31983, fetchData);
+      const dm = createDrawingManager(mapInstance, convertTo31983, fetchData);
+      setDrawingManager(dm);
     };
 
     if (!document.getElementById("google-maps-script")) {
@@ -140,7 +134,6 @@ const Map = () => {
 
   return (
     <div className={`map-container-wrapper ${theme}`}>
-      {/* Painel lateral */}
       <aside className="map-aside">
         <div className="title">🎯 Buscas por Coordenadas</div>
         <div className="hint">ArcGIS + Google Maps, modo sniper.</div>
@@ -160,15 +153,19 @@ const Map = () => {
         <textarea rows="3" placeholder="[[lng,lat], [lng,lat], ...]" />
         <button className="primary">Buscar</button>
 
-        <button
-          className="toggle"
-          onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-        >
+        <button className="toggle" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>
           Alternar para {theme === "light" ? "🌙 Dark" : "☀️ Light"} Mode
+        </button>
+
+        <hr />
+        <button
+          className="secondary"
+          onClick={() => drawingManager?.clearUserOverlays()}
+        >
+          🗑 Limpar desenhos do usuário
         </button>
       </aside>
 
-      {/* Área do mapa */}
       <div ref={mapRef} className="map-area" />
     </div>
   );

@@ -1,5 +1,7 @@
 // drawingManager.js
 export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => {
+  const userOverlays = []; // 👈 guarda overlays do usuário
+
   const drawingManager = new window.google.maps.drawing.DrawingManager({
     drawingMode: null,
     drawingControl: true,
@@ -20,27 +22,18 @@ export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => 
     drawingManager,
     "overlaycomplete",
     (event) => {
+      userOverlays.push(event.overlay); // salva overlay do usuário
+
+      // chama fetchData dependendo do tipo
       if (event.type === "polygon") {
         const path = event.overlay.getPath().getArray();
         const coords = path.map((latlng) => [latlng.lng(), latlng.lat()]);
-        coords.push(coords[0]); // fecha o polígono
+        coords.push(coords[0]);
         const geojson = convertTo31983(coords, "polygon");
         fetchData(geojson, "esriGeometryPolygon", mapInstance);
       }
 
-      if (event.type === "rectangle") {
-        const bounds = event.overlay.getBounds();
-        const ne = bounds.getNorthEast();
-        const sw = bounds.getSouthWest();
-        const envelopeCoords = [
-          [sw.lng(), sw.lat()],
-          [ne.lng(), ne.lat()],
-        ];
-        const envelope = convertTo31983(envelopeCoords, "envelope");
-        fetchData(envelope, "esriGeometryEnvelope", mapInstance);
-      }
-
-      if (event.type === "circle") {
+      if (event.type === "rectangle" || event.type === "circle") {
         const bounds = event.overlay.getBounds();
         const ne = bounds.getNorthEast();
         const sw = bounds.getSouthWest();
@@ -54,14 +47,17 @@ export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => 
 
       if (event.type === "marker") {
         const position = event.overlay.getPosition();
-        const point = convertTo31983(
-          [position.lng(), position.lat()],
-          "point"
-        );
+        const point = convertTo31983([position.lng(), position.lat()], "point");
         fetchData(point, "esriGeometryPoint", mapInstance);
       }
     }
   );
+
+  // função pública para limpar overlays do usuário
+  drawingManager.clearUserOverlays = () => {
+    userOverlays.forEach((overlay) => overlay.setMap(null));
+    userOverlays.length = 0;
+  };
 
   return drawingManager;
 };
