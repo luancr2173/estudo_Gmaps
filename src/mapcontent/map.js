@@ -1,4 +1,3 @@
-/* global google */
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import proj4 from "proj4";
 import { createDrawingManager } from "./drawingManager";
@@ -9,24 +8,24 @@ const Map = () => {
   const [map, setMap] = useState(null);
   const [theme, setTheme] = useState("light");
   const [drawingManager, setDrawingManager] = useState(null);
+
   const [latInput, setLatInput] = useState("");
   const [lngInput, setLngInput] = useState("");
+  const [addressInput, setAddressInput] = useState("");
+  const addressInputRef = useRef(null);
 
+  const arcgisOverlays = useRef([]);
   const sirgas = "+proj=utm +zone=23 +south +datum=SIRGAS2000 +units=m +no_defs";
   const wgs84 = "EPSG:4326";
-
-  // referência para todos os overlays do ArcGIS
-  const arcgisOverlays = useRef([]);
-
+  
+  // Desenha features do ArcGIS
   const plotFeatures = useCallback((data, mapInstance) => {
-    // limpa overlays antigos
     arcgisOverlays.current.forEach((o) => o.setMap(null));
     arcgisOverlays.current = [];
 
     if (!data.features) return;
 
     data.features.forEach((feature) => {
-      // polígonos
       if (feature.geometry?.rings) {
         const paths = feature.geometry.rings.map((ring) =>
           ring.map(([x, y]) => {
@@ -46,7 +45,6 @@ const Map = () => {
         arcgisOverlays.current.push(polygon);
       }
 
-      // pontos
       if (feature.geometry?.x && feature.geometry?.y) {
         const [lng, lat] = proj4(sirgas, wgs84, [
           feature.geometry.x,
@@ -61,6 +59,7 @@ const Map = () => {
     });
   }, []);
 
+  // Consulta ArcGIS
   const fetchData = useCallback(
     async (geometry, geometryType, mapInstance) => {
       const BASE_URL =
@@ -76,21 +75,18 @@ const Map = () => {
         f: "json",
       });
 
-      const url = `${BASE_URL}?${params.toString()}`;
-      console.log("Consulta:", url);
-
       try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const res = await fetch(`${BASE_URL}?${params}`);
         const data = await res.json();
         plotFeatures(data, mapInstance);
-      } catch (error) {
-        console.error("Falha ao buscar dados do ArcGIS:", error);
+      } catch (err) {
+        console.error("Erro ao buscar dados:", err);
       }
     },
     [plotFeatures]
   );
 
+  // Conversão para 31983 (SIRGAS2000/UTM zone 23S)
   const convertTo31983 = (coords, type) => {
     if (type === "polygon") {
       return {
@@ -111,13 +107,12 @@ const Map = () => {
     }
   };
 
+  // Busca por coordenadas
   const handlePointSearch = () => {
     if (!latInput || !lngInput || !map) return;
-
     const lat = parseFloat(latInput);
     const lng = parseFloat(lngInput);
 
-    // cria marcador de busca único (usando o do drawingManager)
     if (drawingManager?.searchMarker) {
       drawingManager.searchMarker.setMap(null);
     }
@@ -128,12 +123,10 @@ const Map = () => {
       title: "Ponto buscado",
     });
     drawingManager.searchMarker = marker;
-
-    // centraliza o mapa no ponto
     map.setCenter({ lat, lng });
 
-    // cria envelope de 100m (~0.001º) ao redor do ponto
-    const delta = 0.0009; // ~100m
+    // Envelope aumentado para garantir interseção
+    const delta = 0.0015;
     const envelopeCoords = [
       [lng - delta, lat - delta],
       [lng + delta, lat + delta],
@@ -143,15 +136,20 @@ const Map = () => {
     fetchData(envelope, "esriGeometryEnvelope", map);
   };
 
+  // Limpar tudo
   const clearAllOverlays = () => {
-    // limpa ArcGIS
     arcgisOverlays.current.forEach((overlay) => overlay.setMap(null));
     arcgisOverlays.current = [];
 
-    // limpa overlays do usuário
+    if (drawingManager?.searchMarker) {
+      drawingManager.searchMarker.setMap(null);
+      drawingManager.searchMarker = null;
+    }
+
     drawingManager?.clearUserOverlays();
   };
 
+  // Inicializa mapa
   useEffect(() => {
     const initMap = () => {
       const mapInstance = new google.maps.Map(mapRef.current, {
@@ -167,7 +165,7 @@ const Map = () => {
     if (!document.getElementById("google-maps-script")) {
       const script = document.createElement("script");
       script.id = "google-maps-script";
-      script.src = `https://maps.googleapis.com/maps/api/js?key=&libraries=drawing`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=&libraries=drawing,places`;
       script.async = true;
       script.defer = true;
       script.onload = () => initMap();
@@ -177,15 +175,69 @@ const Map = () => {
     }
   }, [fetchData]);
 
+  // Autocomplete de endereços
+  useEffect(() => {
+    if (map && window.google && addressInputRef.current) {
+      const autocomplete = new google.maps.places.Autocomplete(
+        addressInputRef.current,
+        {
+          fields: ["geometry", "formatted_address"],
+          componentRestrictions: { country: "br" },
+        }
+      );
+
+      autocomplete.addListener("place_changed", () => {
+        const place = autocomplete.getPlace();
+        if (!place.geometry || !place.geometry.location) {
+          alert("Endereço inválido");
+          return;
+        }
+
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+
+        if (drawingManager?.searchMarker) {
+          drawingManager.searchMarker.setMap(null);
+        }
+
+        const marker = new google.maps.Marker({
+          position: { lat, lng },
+          map,
+          title: place.formatted_address,
+        });
+        drawingManager.searchMarker = marker;
+        map.setCenter({ lat, lng });
+
+        // Envelope mais amplo para interseção confiável
+        const delta = 0.0015;
+        const envelopeCoords = [
+          [lng - delta, lat - delta],
+          [lng + delta, lat + delta],
+        ];
+        const envelope = convertTo31983(envelopeCoords, "envelope");
+
+        fetchData(envelope, "esriGeometryEnvelope", map);
+      });
+    }
+  }, [map, drawingManager, fetchData]);
+
   return (
     <div className={`map-container-wrapper ${theme}`}>
       <aside className="map-aside">
-        <div className="title">🎯 Buscas por Coordenadas</div>
-        <div className="hint">ArcGIS + Google Maps, modo sniper.</div>
+        <div className="title">🎯 Buscas</div>
+
+        <h4>Buscar por endereço</h4>
+        <input
+          type="text"
+          ref={addressInputRef}
+          value={addressInput}
+          onChange={(e) => setAddressInput(e.target.value)}
+          placeholder="Digite um endereço..."
+        />
 
         <hr />
 
-        <h4>Buscar por ponto</h4>
+        <h4>Buscar por coordenadas</h4>
         <label>Latitude</label>
         <input
           type="number"
