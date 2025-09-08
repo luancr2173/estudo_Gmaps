@@ -1,4 +1,6 @@
-export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => {
+// drawingManager.js
+
+const createDrawingManager = (mapInstance, convertTo31983, fetchData) => {
   const userOverlays = [];
 
   const drawingManager = new window.google.maps.drawing.DrawingManager({
@@ -23,7 +25,6 @@ export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => 
     userOverlays.push(event.overlay);
 
     if (event.type === "marker") {
-      // remove marcador anterior
       if (drawingManager.searchMarker) {
         drawingManager.searchMarker.setMap(null);
         userOverlays.splice(userOverlays.indexOf(drawingManager.searchMarker), 1);
@@ -32,15 +33,12 @@ export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => 
       drawingManager.searchMarker = event.overlay;
 
       const position = event.overlay.getPosition();
-
-      // criar envelope de 100m ao redor do marcador
-      const delta = 0.0009; // ~100m em lat/lng (aprox)
+      const delta = 0.0009; // ~100m
       const envelopeCoords = [
         [position.lng() - delta, position.lat() - delta],
         [position.lng() + delta, position.lat() + delta],
       ];
       const envelope = convertTo31983(envelopeCoords, "envelope");
-
       fetchData(envelope, "esriGeometryEnvelope", mapInstance);
     }
 
@@ -75,3 +73,5 @@ export const createDrawingManager = (mapInstance, convertTo31983, fetchData) => 
 
   return drawingManager;
 };
+
+export default createDrawingManager;
