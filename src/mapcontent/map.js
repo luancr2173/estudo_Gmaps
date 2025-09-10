@@ -1,3 +1,4 @@
+/*global google*/
 import React, { useEffect, useRef, useState } from "react";
 import createDrawingManager from "./drawingManager"; // ✅ default export
 import { convertTo31983, convertFrom31983 } from "./mapUtils";
