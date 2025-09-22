@@ -1,11 +1,14 @@
 import './App.css';
 import Map from './mapcontent/map';
+import MapDrawer from './vdoBar/drawer';
 
 function App() {
   return (
 
     <div className='App'>
-      <Map />
+      <MapDrawer>
+      </MapDrawer>
+      <Map/>
     </div>
 
   );

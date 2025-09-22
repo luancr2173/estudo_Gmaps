@@ -6,11 +6,15 @@ export const createArcgisOverlayManager = () => {
     overlays.length = 0;
   };
 
-  const plotFeatures = (data, mapInstance, proj4Convert) => {
+  const plotFeatures = (input, mapInstance, proj4Convert) => {
     clear();
-    if (!data.features) return;
 
-    data.features.forEach(feature => {
+    // normalizar: pode ser objeto com features ou array
+    const features = Array.isArray(input) ? input : input?.features || [];
+    if (features.length === 0) return;
+
+    features.forEach(feature => {
+      // Polígonos
       if (feature.geometry?.rings) {
         const paths = feature.geometry.rings.map(ring =>
           ring.map(([x, y]) => {
@@ -18,6 +22,7 @@ export const createArcgisOverlayManager = () => {
             return { lat, lng };
           })
         );
+
         const polygon = new google.maps.Polygon({
           paths,
           strokeColor: "#FF0000",
@@ -27,12 +32,17 @@ export const createArcgisOverlayManager = () => {
           fillOpacity: 0.35,
           map: mapInstance
         });
+
         overlays.push(polygon);
       }
 
+      // Pontos isolados (coordenadas x/y)
       if (feature.geometry?.x && feature.geometry?.y) {
         const [lng, lat] = proj4Convert([feature.geometry.x, feature.geometry.y]);
-        const marker = new google.maps.Marker({ position: { lat, lng }, map: mapInstance });
+        const marker = new google.maps.Marker({
+          position: { lat, lng },
+          map: mapInstance
+        });
         overlays.push(marker);
       }
     });

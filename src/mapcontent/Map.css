@@ -43,6 +43,7 @@
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
   overflow-y: auto;
+  margin-top: 2vw;
 }
 
 .map-aside h4 {
